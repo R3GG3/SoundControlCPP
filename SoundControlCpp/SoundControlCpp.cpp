@@ -9,6 +9,8 @@
 #include <string>
 #include <Windows.h>
 #include<thread>
+#include <list>
+#include <algorithm>
 
 
 #define NULL nullptr
@@ -42,8 +44,8 @@ private:
 
 	int session_count = 0;
 	DWORD process_id;
-	string list_to_mute[10] = {};
-	
+	std::list<string> list_to_mute = {};
+
 
 	string purify_name(string name) {
 		int index = name.find_last_of("\\");
@@ -118,7 +120,7 @@ public:
 			if (process_id != 0 && process_name != "SongMuter.exe") {
 				cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
 			}
-			if (list_to_mute->find(process_name)) {
+			if (std::find(list_to_mute.begin(), list_to_mute.end(), process_name) != list_to_mute.end()) {
 				audio_volume->SetMute(true, 0);
 			}
 
@@ -149,25 +151,27 @@ public:
 				//cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
 			}
 
-			if (list_to_mute->find(process_name)) {
-				audio_volume->SetMute(false, 0);
-			}
+			if (std::find(list_to_mute.begin(), list_to_mute.end(), process_name) != list_to_mute.end()) {
+				{
+					audio_volume->SetMute(false, 0);
+				}
 
-			SAFE_RELEASE(session_control);
-			SAFE_RELEASE(audio_volume);
-			SAFE_RELEASE(session_control2);
-			process_id = 0;
+				SAFE_RELEASE(session_control);
+				SAFE_RELEASE(audio_volume);
+				SAFE_RELEASE(session_control2);
+				process_id = 0;
+			}
 		}
 	}
-	
-	void LoadList(string filename) {
+
+	void LoadList(string filename)
+	{
 		ifstream MyReadFile(filename);
 		string myText;
-		int i = 0;
-		string test = "";
 
-		while (std::getline(MyReadFile, myText)) {
-			list_to_mute[i] = myText;
+		while (std::getline(MyReadFile, myText))
+		{
+			list_to_mute.insert(list_to_mute.end(), myText);
 		}
 	}
 };
@@ -191,6 +195,6 @@ void ListenKey() {
 
 int main() {
 	std::thread thread(ListenKey);
-	while(true){}
+	while (true) {}
 	return 0;
 }
