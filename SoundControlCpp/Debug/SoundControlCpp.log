@@ -1,5 +1,4 @@
 ﻿  SoundControlCpp.cpp
-C:\Users\konra\source\repos\SoundControlCpp\SoundControlCpp\SoundControlCpp.cpp(11,1): warning C4005: 'NULL': macro redefinition
+C:\Users\konra\source\repos\SoundControlCpp\SoundControlCpp\SoundControlCpp.cpp(14,1): warning C4005: 'NULL': macro redefinition
 B:\VS\VC\Tools\MSVC\14.29.30133\include\vcruntime.h(233): message : see previous definition of 'NULL'
-C:\Users\konra\source\repos\SoundControlCpp\SoundControlCpp\SoundControlCpp.cpp(136,5): warning C4102: 'Exit': unreferenced label
-  SoundControlCpp.vcxproj -> C:\Users\konra\source\repos\SoundControlCpp\Debug\SoundControlCpp.exe
+  SoundControlCpp.vcxproj -> C:\Users\konra\source\repos\SoundControlCpp\Debug\SongMuter.exe

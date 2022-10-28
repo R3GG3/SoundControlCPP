@@ -1,5 +1,3 @@
-//Pobiera identyfikator GUID do³¹czony do wyra¿enia. = _uuidof
-
 #include <iostream>
 #include <Audioclient.h>
 #include <mmdeviceapi.h>
@@ -7,47 +5,24 @@
 #include <audiopolicy.h>
 #include <Unknwn.h>
 #include <Psapi.h>
+#include <fstream>
+#include <string>
+#include <Windows.h>
+#include<thread>
+
 
 #define NULL nullptr
 #define SAFE_RELEASE(punk)  \
               if ((punk) != NULL)  \
                 { (punk)->Release(); (punk) = NULL; }
 
+const SHORT MUTE_KEYBIND = 0x61;
+const SHORT UNMUTE_KEYBIND = 0x60;
+
 using namespace std;
 
-string get_process_name(DWORD processID) {
-	const string NULL_MESSAGE = "NULL";
-	HANDLE Handle = OpenProcess(
-		PROCESS_ALL_ACCESS,
-		FALSE,
-		processID
-	);
-	if (Handle)
-	{
-		char Buffer[MAX_PATH];
-		if (GetProcessImageFileNameA(Handle, Buffer, MAX_PATH))
-		{
-			CloseHandle(Handle);
-			return  std::string(Buffer);
-		}
-
-		CloseHandle(Handle);
-		return NULL_MESSAGE;
-	}
-	else {
-		return NULL_MESSAGE;
-	}
-}
-
-string purify_name(string name) {
-	int index = name.find_last_of("\\");
-	name = name.substr(index+1);
-	return name;
-}
-
-int main() {
-	string list_to_mute[2] = { "Spotify.exe", "opera.exe" };
-
+class SoundControl {
+private:
 	IAudioSessionControl* session_control = NULL;
 	IAudioSessionControl2* session_control2 = NULL;
 	IAudioSessionManager* session_manager = NULL;
@@ -64,75 +39,158 @@ int main() {
 	const IID IID_IAudioSessionEnumerator = __uuidof(IAudioSessionEnumerator);
 
 	ISimpleAudioVolume* audio_volume = NULL;
-	const float chosen_vol = 0;
-	float current_vol = 0;
-
-	hr = CoInitialize(0);
-	hr = CoCreateInstance(
-		CLSID_MMDeviceEnumerator, NULL,
-		CLSCTX_ALL, IID_IMMDeviceEnumerator,
-		(void**)&audio_device_enum);
-
-
-	hr = audio_device_enum->GetDefaultAudioEndpoint(eRender, eConsole, &audio_device);
-
-	DWORD device_state;
-	hr = audio_device->Activate(__uuidof(IAudioSessionManager), CLSCTX_ALL, NULL, (void**)&session_manager);
-	hr = audio_device->GetState(&device_state);
-	cout << "Device State: " << device_state << endl;
-
-	LPCGUID quered_interface;
-	hr = session_manager->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&quered_interface);
-	hr = session_manager->GetSimpleAudioVolume(quered_interface, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, &audio_volume);
-	hr = session_manager->GetAudioSessionControl(quered_interface, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, &session_control);
-	hr = session_manager->QueryInterface(__uuidof(IAudioSessionManager2), (void**)&session_manager2);
-	hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
-	hr = audio_volume->GetMasterVolume(&current_vol);
-	hr = session_manager2->GetSessionEnumerator(&session_enum);
 
 	int session_count = 0;
-	hr = session_enum->GetCount(&session_count);
-	
-	
-	cout << "Session Count: " << session_count << endl;
-
-	LPWSTR display_name;
 	DWORD process_id;
+	string list_to_mute[10] = {};
+	
 
-	cout << "Error Code (Before Loop): " << hr << endl;
-	for (int i = 0; i < session_count; i++) {
-		hr = session_enum->GetSession(i, &session_control);
-		hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
-		hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
-		hr = session_control2->GetProcessId(&process_id);
-		hr = session_control2->GetDisplayName(&display_name);
-		//hr = audio_volume->SetMute(true, 0);
-		string process_name = "";
-		try {
-			process_name = get_process_name(process_id);
-			process_name = purify_name(process_name);
-		}
-		catch(exception){
-
-		}
-		cout << "Session [" << i + 1 << "]: " <<  process_name << "->" << process_id << endl;
-
-		if (std::find(std::begin(list_to_mute), std::end(list_to_mute), process_name) != std::end(list_to_mute)) {
-			audio_volume->SetMute(true, 0);
-		}
-
-		SAFE_RELEASE(session_control);
-		display_name = 0;
-		SAFE_RELEASE(audio_volume);
-		SAFE_RELEASE(session_control2);
-		process_id = 0;
+	string purify_name(string name) {
+		int index = name.find_last_of("\\");
+		name = name.substr(index + 1);
+		return name;
 	}
 
-	cout << "Error Code: " << hr << endl;
-	cout << "Volume: " << current_vol << endl;
-	
-	return 0;
+	string get_process_name(DWORD processID) {
+		const string NULL_MESSAGE = "NULL";
+		HANDLE Handle = OpenProcess(
+			PROCESS_ALL_ACCESS,
+			FALSE,
+			processID
+		);
+		if (Handle)
+		{
+			char Buffer[MAX_PATH];
+			if (GetProcessImageFileNameA(Handle, Buffer, MAX_PATH))
+			{
+				CloseHandle(Handle);
+				return  std::string(Buffer);
+			}
 
-Exit:
-	printf("Error!\n");
+			CloseHandle(Handle);
+			return NULL_MESSAGE;
+		}
+		else {
+			return NULL_MESSAGE;
+		}
+	}
+
+public:
+	SoundControl(string filename) {
+		LoadList(filename);
+
+		hr = CoInitialize(0);
+		hr = CoCreateInstance(
+			CLSID_MMDeviceEnumerator, NULL,
+			CLSCTX_ALL, IID_IMMDeviceEnumerator,
+			(void**)&audio_device_enum);
+
+
+		hr = audio_device_enum->GetDefaultAudioEndpoint(eRender, eConsole, &audio_device);
+
+		hr = audio_device->Activate(__uuidof(IAudioSessionManager), CLSCTX_ALL, NULL, (void**)&session_manager);
+
+		LPCGUID quered_interface;
+		hr = session_manager->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&quered_interface);
+		hr = session_manager->GetSimpleAudioVolume(quered_interface, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, &audio_volume);
+		hr = session_manager->GetAudioSessionControl(quered_interface, AUDCLNT_STREAMFLAGS_EVENTCALLBACK, &session_control);
+		hr = session_manager->QueryInterface(__uuidof(IAudioSessionManager2), (void**)&session_manager2);
+		hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
+		hr = session_manager2->GetSessionEnumerator(&session_enum);
+	}
+
+	void Mute() {
+		hr = session_enum->GetCount(&session_count);
+		for (int i = 0; i < session_count; i++) {
+			hr = session_enum->GetSession(i, &session_control);
+			hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
+			hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
+			hr = session_control2->GetProcessId(&process_id);
+
+			string process_name = "";
+			try {
+				process_name = get_process_name(process_id);
+				process_name = purify_name(process_name);
+			}
+			catch (exception) {
+
+			}
+			if (process_id != 0 && process_name != "SongMuter.exe") {
+				cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
+			}
+			if (list_to_mute->find(process_name)) {
+				audio_volume->SetMute(true, 0);
+			}
+
+			SAFE_RELEASE(session_control);
+			SAFE_RELEASE(audio_volume);
+			SAFE_RELEASE(session_control2);
+			process_id = 0;
+		}
+	}
+
+	void UnMute() {
+		hr = session_enum->GetCount(&session_count);
+		for (int i = 0; i < session_count; i++) {
+			hr = session_enum->GetSession(i, &session_control);
+			hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
+			hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
+			hr = session_control2->GetProcessId(&process_id);
+
+			string process_name = "";
+			try {
+				process_name = get_process_name(process_id);
+				process_name = purify_name(process_name);
+			}
+			catch (exception) {
+
+			}
+			if (process_id != 0 && process_name != "SoundControlCpp.exe") {
+				//cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
+			}
+
+			if (list_to_mute->find(process_name)) {
+				audio_volume->SetMute(false, 0);
+			}
+
+			SAFE_RELEASE(session_control);
+			SAFE_RELEASE(audio_volume);
+			SAFE_RELEASE(session_control2);
+			process_id = 0;
+		}
+	}
+	
+	void LoadList(string filename) {
+		ifstream MyReadFile(filename);
+		string myText;
+		int i = 0;
+		string test = "";
+
+		while (std::getline(MyReadFile, myText)) {
+			list_to_mute[i] = myText;
+		}
+	}
+};
+
+void ListenKey() {
+	SoundControl sound_control("list.txt");
+	while (true) {
+		if (GetKeyState(MUTE_KEYBIND) & 0x8000) {
+			sound_control.Mute();
+			cout << "[Muted]" << endl;
+			Sleep(1000);
+		}
+
+		else if (GetKeyState(UNMUTE_KEYBIND) & 0x8000) {
+			sound_control.UnMute();
+			cout << "[Unmuted]" << endl;
+			Sleep(1000);
+		}
+	}
+}
+
+int main() {
+	std::thread thread(ListenKey);
+	while(true){}
+	return 0;
 }
