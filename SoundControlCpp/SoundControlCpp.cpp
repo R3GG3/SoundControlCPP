@@ -3,14 +3,12 @@
 #include <mmdeviceapi.h>
 #include <combaseapi.h>
 #include <audiopolicy.h>
-#include <Unknwn.h>
 #include <Psapi.h>
 #include <fstream>
 #include <string>
 #include <Windows.h>
 #include<thread>
 #include <list>
-#include <algorithm>
 
 
 #define NULL nullptr
@@ -20,6 +18,7 @@
 
 const SHORT MUTE_KEYBIND = 0x61;
 const SHORT UNMUTE_KEYBIND = 0x60;
+const SHORT EXIT_KEYBIND = 0x63;
 
 using namespace std;
 
@@ -99,16 +98,31 @@ public:
 		hr = session_manager->QueryInterface(__uuidof(IAudioSessionManager2), (void**)&session_manager2);
 		hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
 		hr = session_manager2->GetSessionEnumerator(&session_enum);
+		
+		SAFE_RELEASE(session_manager);
+		SAFE_RELEASE(session_manager2);
+		SAFE_RELEASE(audio_device);
+		SAFE_RELEASE(audio_device_enum);
+		delete quered_interface;
+	}
+
+	~SoundControl() {
+		SAFE_RELEASE(session_enum);
+		SAFE_RELEASE(session_control);
+		SAFE_RELEASE(session_control2);
+	}
+
+	void Get_process_id(int i) {
+		hr = session_enum->GetSession(i, &session_control);
+		hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
+		hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
+		hr = session_control2->GetProcessId(&process_id);
 	}
 
 	void Mute() {
 		hr = session_enum->GetCount(&session_count);
 		for (int i = 0; i < session_count; i++) {
-			hr = session_enum->GetSession(i, &session_control);
-			hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
-			hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
-			hr = session_control2->GetProcessId(&process_id);
-
+			Get_process_id(i);
 			string process_name = "";
 			try {
 				process_name = get_process_name(process_id);
@@ -117,28 +131,19 @@ public:
 			catch (exception) {
 
 			}
-			if (process_id != 0 && process_name != "SongMuter.exe") {
-				cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
-			}
+			//if (process_id != 0 && process_name != "SongMuter.exe") {
+				//cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
+			//}
 			if (std::find(list_to_mute.begin(), list_to_mute.end(), process_name) != list_to_mute.end()) {
 				audio_volume->SetMute(true, 0);
 			}
-
-			SAFE_RELEASE(session_control);
-			SAFE_RELEASE(audio_volume);
-			SAFE_RELEASE(session_control2);
-			process_id = 0;
 		}
 	}
 
 	void UnMute() {
 		hr = session_enum->GetCount(&session_count);
 		for (int i = 0; i < session_count; i++) {
-			hr = session_enum->GetSession(i, &session_control);
-			hr = session_control->QueryInterface(__uuidof(ISimpleAudioVolume), (void**)&audio_volume);
-			hr = session_control->QueryInterface(__uuidof(IAudioSessionControl2), (void**)&session_control2);
-			hr = session_control2->GetProcessId(&process_id);
-
+			Get_process_id(i);
 			string process_name = "";
 			try {
 				process_name = get_process_name(process_id);
@@ -147,19 +152,14 @@ public:
 			catch (exception) {
 
 			}
-			if (process_id != 0 && process_name != "SoundControlCpp.exe") {
+			//if (process_id != 0 && process_name != "SoundControlCpp.exe") {
 				//cout << "Session [" << i + 1 << "]: " << process_name << "->" << process_id << endl;
-			}
+			//}
 
 			if (std::find(list_to_mute.begin(), list_to_mute.end(), process_name) != list_to_mute.end()) {
 				{
 					audio_volume->SetMute(false, 0);
 				}
-
-				SAFE_RELEASE(session_control);
-				SAFE_RELEASE(audio_volume);
-				SAFE_RELEASE(session_control2);
-				process_id = 0;
 			}
 		}
 	}
@@ -181,20 +181,28 @@ void ListenKey() {
 	while (true) {
 		if (GetKeyState(MUTE_KEYBIND) & 0x8000) {
 			sound_control.Mute();
-			cout << "[Muted]" << endl;
+			//cout << "[Muted]" << endl;
 			Sleep(1000);
 		}
 
 		else if (GetKeyState(UNMUTE_KEYBIND) & 0x8000) {
 			sound_control.UnMute();
-			cout << "[Unmuted]" << endl;
+			//cout << "[Unmuted]" << endl;
 			Sleep(1000);
+		}
+
+		else if (GetKeyState(EXIT_KEYBIND) & 0x8000) {
+			break;
 		}
 	}
 }
 
 int main() {
-	std::thread thread(ListenKey);
-	while (true) {}
+	HWND window;
+	AllocConsole();
+	window = FindWindowA("ConsoleWindowClass", NULL);
+	ShowWindow(window, 0);
+
+	ListenKey();
 	return 0;
 }
